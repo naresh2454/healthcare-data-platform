@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── PyFlink + connectors ──────────────────────────────────────────────────────
 RUN pip3 install --no-cache-dir --timeout=600 --retries=5 \
         apache-flink==1.18.0 \
-        apache-flink-libraries==1.18.0
+        apache-flink-libraries==1.18.0 \
+        mysql-connector-python==8.3.0
 
 # ── Flink SQL connector JARs (Kafka + MySQL CDC + JDBC) ──────────────────────
 ARG FLINK_LIB=/opt/flink/lib

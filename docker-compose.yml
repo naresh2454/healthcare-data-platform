@@ -190,6 +190,14 @@ services:
       - MAX_RETRIES=${MAX_RETRIES}
       - RETRY_DELAY=${RETRY_DELAY}
       - POLL_INTERVAL=${POLL_INTERVAL}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - ALERT_FROM_EMAIL=${ALERT_FROM_EMAIL}
+      - MYSQL_HOST=mysql
+      - MYSQL_CONTAINER_PORT=${MYSQL_CONTAINER_PORT}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: flink-jobmanager
@@ -214,6 +222,19 @@ services:
     volumes:
       - ./flink/jobs:/opt/flink/jobs
     environment:
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS}
+      - MYSQL_URL=jdbc:mysql://mysql:${MYSQL_CONTAINER_PORT}/${MYSQL_DATABASE}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC&sessionVariables=foreign_key_checks=0
+      - MYSQL_HOST=mysql
+      - MYSQL_CONTAINER_PORT=${MYSQL_CONTAINER_PORT}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - ALERT_FROM_EMAIL=${ALERT_FROM_EMAIL}
+      - FLINK_CHECKPOINT_INTERVAL=${FLINK_CHECKPOINT_INTERVAL}
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: flink-jobmanager
