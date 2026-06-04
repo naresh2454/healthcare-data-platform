@@ -1,35 +1,16 @@
 import json
-import re
 import uuid
-from datetime import date, datetime
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, EmailStr
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 import config
 
 router = APIRouter()
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-
-VALID_SPECIALIZATIONS = {
-    "Cardiology", "Dermatology", "Pediatrics", "Orthopedics",
-    "Neurology", "Oncology", "Gastroenterology", "Psychiatry",
-    "General Medicine", "Gynecology", "Radiology", "Urology",
-}
-VALID_TREATMENT_TYPES = {
-    "MRI", "CT Scan", "Chemotherapy", "Surgery", "Physiotherapy",
-    "X-Ray", "Blood Test", "ECG", "Consultation", "Vaccination",
-    "Dental", "Emergency",
-}
-VALID_PAYMENT_METHODS  = {"Cash", "Insurance", "Card", "Credit Card", "Debit Card", "UPI", "Net Banking"}
-VALID_PAYMENT_STATUSES = {"Paid", "Pending", "Failed", "Refunded"}
-VALID_APPT_STATUSES    = {"Scheduled", "Completed", "Cancelled", "No-show"}
-
-
-# ── Kafka helpers ─────────────────────────────────────────────────────────────
 
 def _producer():
     return KafkaProducer(
@@ -52,7 +33,6 @@ def _send(topic: str, key: str, payload: dict):
 
 
 # ── Patient ───────────────────────────────────────────────────────────────────
-
 class PatientIn(BaseModel):
     first_name: str
     last_name: str
@@ -64,47 +44,6 @@ class PatientIn(BaseModel):
     insurance_number: Optional[str] = None
     email: Optional[str] = None
 
-    @field_validator("first_name", "last_name")
-    @classmethod
-    def name_length(cls, v):
-        v = v.strip()
-        if len(v) < 2:
-            raise ValueError("must be at least 2 characters")
-        return v
-
-    @field_validator("gender")
-    @classmethod
-    def valid_gender(cls, v):
-        if v not in ("M", "F"):
-            raise ValueError("must be M or F")
-        return v
-
-    @field_validator("contact_number")
-    @classmethod
-    def valid_phone(cls, v):
-        digits = re.sub(r"\D", "", v)
-        if len(digits) != 10:
-            raise ValueError("must be exactly 10 digits")
-        return digits
-
-    @field_validator("date_of_birth")
-    @classmethod
-    def valid_dob(cls, v):
-        today = date.today()
-        if v >= today:
-            raise ValueError("must be in the past")
-        age = (today - v).days / 365.25
-        if age > 120:
-            raise ValueError("invalid date of birth")
-        return v
-
-    @field_validator("email")
-    @classmethod
-    def valid_email(cls, v):
-        if v and not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", v):
-            raise ValueError("invalid email format")
-        return v
-
 
 @router.post("/patient")
 def register_patient(body: PatientIn):
@@ -114,7 +53,6 @@ def register_patient(body: PatientIn):
 
 
 # ── Doctor ────────────────────────────────────────────────────────────────────
-
 class DoctorIn(BaseModel):
     first_name: str
     last_name: str
@@ -123,43 +61,6 @@ class DoctorIn(BaseModel):
     years_experience: int
     hospital_branch: Optional[str] = None
     email: Optional[str] = None
-
-    @field_validator("first_name", "last_name")
-    @classmethod
-    def name_length(cls, v):
-        v = v.strip()
-        if len(v) < 2:
-            raise ValueError("must be at least 2 characters")
-        return v
-
-    @field_validator("specialization")
-    @classmethod
-    def valid_specialization(cls, v):
-        if v not in VALID_SPECIALIZATIONS:
-            raise ValueError(f"must be one of {sorted(VALID_SPECIALIZATIONS)}")
-        return v
-
-    @field_validator("phone_number")
-    @classmethod
-    def valid_phone(cls, v):
-        digits = re.sub(r"\D", "", v)
-        if len(digits) != 10:
-            raise ValueError("must be exactly 10 digits")
-        return digits
-
-    @field_validator("years_experience")
-    @classmethod
-    def valid_experience(cls, v):
-        if not (0 <= v <= 60):
-            raise ValueError("must be between 0 and 60")
-        return v
-
-    @field_validator("email")
-    @classmethod
-    def valid_email(cls, v):
-        if v and not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", v):
-            raise ValueError("invalid email format")
-        return v
 
 
 @router.post("/doctor")
@@ -170,7 +71,6 @@ def add_doctor(body: DoctorIn):
 
 
 # ── Appointment ───────────────────────────────────────────────────────────────
-
 class AppointmentIn(BaseModel):
     patient_id: str
     doctor_id: str
@@ -178,30 +78,6 @@ class AppointmentIn(BaseModel):
     appointment_time: str
     reason_for_visit: Optional[str] = None
     status: str = "Scheduled"
-
-    @field_validator("patient_id", "doctor_id")
-    @classmethod
-    def non_empty(cls, v):
-        if not v.strip():
-            raise ValueError("cannot be empty")
-        return v.strip()
-
-    @field_validator("appointment_time")
-    @classmethod
-    def valid_time(cls, v):
-        # Accept HH:MM or HH:MM:SS
-        if re.match(r"^\d{2}:\d{2}$", v):
-            return v + ":00"
-        if re.match(r"^\d{2}:\d{2}:\d{2}$", v):
-            return v
-        raise ValueError("must be in HH:MM format")
-
-    @field_validator("status")
-    @classmethod
-    def valid_status(cls, v):
-        if v not in VALID_APPT_STATUSES:
-            raise ValueError(f"must be one of {sorted(VALID_APPT_STATUSES)}")
-        return v
 
 
 @router.post("/appointment")
@@ -212,34 +88,12 @@ def schedule_appointment(body: AppointmentIn):
 
 
 # ── Treatment ─────────────────────────────────────────────────────────────────
-
 class TreatmentIn(BaseModel):
     appointment_id: str
     treatment_type: str
     description: Optional[str] = None
     cost: float
     treatment_date: date
-
-    @field_validator("appointment_id")
-    @classmethod
-    def non_empty(cls, v):
-        if not v.strip():
-            raise ValueError("cannot be empty")
-        return v.strip()
-
-    @field_validator("treatment_type")
-    @classmethod
-    def valid_type(cls, v):
-        if v not in VALID_TREATMENT_TYPES:
-            raise ValueError(f"must be one of {sorted(VALID_TREATMENT_TYPES)}")
-        return v
-
-    @field_validator("cost")
-    @classmethod
-    def valid_cost(cls, v):
-        if v <= 0:
-            raise ValueError("must be greater than 0")
-        return round(v, 2)
 
 
 @router.post("/treatment")
@@ -250,7 +104,6 @@ def record_treatment(body: TreatmentIn):
 
 
 # ── Billing ───────────────────────────────────────────────────────────────────
-
 class BillingIn(BaseModel):
     patient_id: str
     treatment_id: str
@@ -258,34 +111,6 @@ class BillingIn(BaseModel):
     amount: float
     payment_method: Optional[str] = None
     payment_status: str = "Pending"
-
-    @field_validator("patient_id", "treatment_id")
-    @classmethod
-    def non_empty(cls, v):
-        if not v.strip():
-            raise ValueError("cannot be empty")
-        return v.strip()
-
-    @field_validator("amount")
-    @classmethod
-    def valid_amount(cls, v):
-        if v <= 0:
-            raise ValueError("must be greater than 0")
-        return round(v, 2)
-
-    @field_validator("payment_method")
-    @classmethod
-    def valid_method(cls, v):
-        if v and v not in VALID_PAYMENT_METHODS:
-            raise ValueError(f"must be one of {sorted(VALID_PAYMENT_METHODS)}")
-        return v
-
-    @field_validator("payment_status")
-    @classmethod
-    def valid_status(cls, v):
-        if v not in VALID_PAYMENT_STATUSES:
-            raise ValueError(f"must be one of {sorted(VALID_PAYMENT_STATUSES)}")
-        return v
 
 
 @router.post("/billing")
@@ -295,52 +120,120 @@ def generate_bill(body: BillingIn):
     return _send("billing", bill_id, payload)
 
 
+# ── Manual Alert (direct to alerts Kafka topic → Flink → Gmail) ──────────────
+class AlertIn(BaseModel):
+    patient_id: str
+    alert_type: str
+    severity: str
+    alert_message: str
+    hospital: Optional[str] = "City General Hospital"
+    ward: Optional[str] = None
+
+
+@router.post("/alert")
+def send_alert(body: AlertIn):
+    from datetime import datetime
+    alert_id = str(uuid.uuid4())
+    payload = {
+        "alert_id":      alert_id,
+        "alert_type":    body.alert_type,
+        "severity":      body.severity,
+        "patient_id":    body.patient_id,
+        "hospital":      body.hospital,
+        "ward":          body.ward,
+        "alert_message": body.alert_message,
+        "source_topic":  "manual",
+        "ts":            datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    return _send("alerts", alert_id, payload)
+
+
+# ── Lab Report ───────────────────────────────────────────────────────────────
+class LabReportIn(BaseModel):
+    patient_id: str
+    doctor_id: str
+    hospital: Optional[str] = "City General Hospital"
+    test_name: str
+    value: float
+    unit: str
+    normal_range: str
+    flag: str
+    amount: float
+
+
+@router.post("/lab-report")
+def add_lab_report(body: LabReportIn):
+    from datetime import datetime
+    report_id = str(uuid.uuid4())
+    payload = {
+        "report_id": report_id,
+        "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+        **body.model_dump(),
+    }
+    return _send("lab_reports", report_id, payload)
+
+
+# ── Hospital Event ────────────────────────────────────────────────────────────
+class HospitalEventIn(BaseModel):
+    patient_id: str
+    department_id: str
+    hospital: Optional[str] = "City General Hospital"
+    ward: Optional[str] = None
+    event_type: str
+    amount: float
+
+
+@router.post("/hospital-event")
+def add_hospital_event(body: HospitalEventIn):
+    from datetime import datetime
+    event_id = str(uuid.uuid4())
+    payload = {
+        "event_id": event_id,
+        "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+        **body.model_dump(),
+    }
+    return _send("hospital_events", event_id, payload)
+
+
+# ── ICU Code ──────────────────────────────────────────────────────────────────
+class IcuCodeIn(BaseModel):
+    patient_id: str
+    department_id: str
+    hospital: Optional[str] = "City General Hospital"
+    ward: Optional[str] = None
+    code_type: str
+    severity: str
+    amount: float
+    status: str = "Activated"
+
+
+@router.post("/icu-code")
+def add_icu_code(body: IcuCodeIn):
+    from datetime import datetime
+    code_id = str(uuid.uuid4())
+    payload = {
+        "code_id": code_id,
+        "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+        **body.model_dump(),
+    }
+    return _send("icu_codes", code_id, payload)
+
+
 # ── Department ────────────────────────────────────────────────────────────────
-
-VALID_DEPT_BRANCHES = {
-    "Central Hospital", "Westside Clinic", "Eastside Clinic", "North Wing", "South Wing"
-}
-
 class DepartmentIn(BaseModel):
     department_id: str
     department_name: str
-    hospital_branch: Optional[str] = None
-
-    @field_validator("department_id")
-    @classmethod
-    def valid_dept_id(cls, v):
-        v = v.strip().upper()
-        if len(v) < 2:
-            raise ValueError("must be at least 2 characters")
-        return v
-
-    @field_validator("department_name")
-    @classmethod
-    def valid_dept_name(cls, v):
-        v = v.strip()
-        if len(v) < 2:
-            raise ValueError("must be at least 2 characters")
-        return v
-
-    @field_validator("hospital_branch")
-    @classmethod
-    def valid_branch(cls, v):
-        if v and v not in VALID_DEPT_BRANCHES:
-            raise ValueError(f"must be one of {sorted(VALID_DEPT_BRANCHES)}")
-        return v
+    hospital_branch: str
 
 
 @router.post("/department")
 def add_department(body: DepartmentIn):
     payload = body.model_dump()
-    return _send("departments", payload["department_id"], payload)
+    return _send("departments", body.department_id, payload)
 
 
 # ── Patient Vitals ────────────────────────────────────────────────────────────
-
-VALID_WARDS = {"Ward-A", "Ward-B", "ICU-1", "ICU-2", "ER-1"}
-
-class PatientVitalsIn(BaseModel):
+class VitalsIn(BaseModel):
     patient_id: str
     hospital: Optional[str] = None
     ward: Optional[str] = None
@@ -351,237 +244,15 @@ class PatientVitalsIn(BaseModel):
     temperature_celsius: float
     respiratory_rate: int
     is_anomaly: bool = False
-    ts: Optional[datetime] = None
-
-    @field_validator("patient_id")
-    @classmethod
-    def non_empty(cls, v):
-        if not v.strip():
-            raise ValueError("cannot be empty")
-        return v.strip()
-
-    @field_validator("heart_rate")
-    @classmethod
-    def valid_hr(cls, v):
-        if not (30 <= v <= 250):
-            raise ValueError("must be between 30 and 250")
-        return v
-
-    @field_validator("spo2")
-    @classmethod
-    def valid_spo2(cls, v):
-        if not (50.0 <= v <= 100.0):
-            raise ValueError("must be between 50.0 and 100.0")
-        return round(v, 1)
-
-    @field_validator("systolic")
-    @classmethod
-    def valid_systolic(cls, v):
-        if not (50 <= v <= 250):
-            raise ValueError("must be between 50 and 250")
-        return v
-
-    @field_validator("diastolic")
-    @classmethod
-    def valid_diastolic(cls, v):
-        if not (30 <= v <= 150):
-            raise ValueError("must be between 30 and 150")
-        return v
-
-    @field_validator("temperature_celsius")
-    @classmethod
-    def valid_temp(cls, v):
-        if not (33.0 <= v <= 45.0):
-            raise ValueError("must be between 33.0 and 45.0")
-        return round(v, 1)
-
-    @field_validator("respiratory_rate")
-    @classmethod
-    def valid_rr(cls, v):
-        if not (5 <= v <= 60):
-            raise ValueError("must be between 5 and 60")
-        return v
 
 
-@router.post("/patient-vitals")
-def record_vitals(body: PatientVitalsIn):
-    event_id = str(uuid.uuid4())
-    ts = body.ts or datetime.utcnow()
-    data = body.model_dump()
-    data["event_id"] = event_id
-    data["ts"] = ts.strftime("%Y-%m-%dT%H:%M:%S")
-    return _send("patient_vitals", event_id, data)
-
-
-# ── Lab Report ────────────────────────────────────────────────────────────────
-
-VALID_LAB_TESTS = {"Glucose", "Hemoglobin", "WBC", "Creatinine", "Troponin", "Sodium"}
-VALID_FLAGS     = {"normal", "low", "high", "critical"}
-
-class LabReportIn(BaseModel):
-    patient_id: str
-    doctor_id: str
-    hospital: Optional[str] = None
-    test_name: str
-    value: float
-    unit: Optional[str] = None
-    normal_range: Optional[str] = None
-    flag: str
-    amount: float
-    ts: Optional[datetime] = None
-
-    @field_validator("patient_id", "doctor_id")
-    @classmethod
-    def non_empty(cls, v):
-        if not v.strip():
-            raise ValueError("cannot be empty")
-        return v.strip()
-
-    @field_validator("test_name")
-    @classmethod
-    def valid_test(cls, v):
-        if v not in VALID_LAB_TESTS:
-            raise ValueError(f"must be one of {sorted(VALID_LAB_TESTS)}")
-        return v
-
-    @field_validator("value")
-    @classmethod
-    def valid_value(cls, v):
-        if v < 0:
-            raise ValueError("must be non-negative")
-        return round(v, 3)
-
-    @field_validator("flag")
-    @classmethod
-    def valid_flag(cls, v):
-        if v not in VALID_FLAGS:
-            raise ValueError(f"must be one of {sorted(VALID_FLAGS)}")
-        return v
-
-    @field_validator("amount")
-    @classmethod
-    def valid_amount(cls, v):
-        if v < 0:
-            raise ValueError("must be non-negative")
-        return round(v, 2)
-
-
-@router.post("/lab-report")
-def record_lab_report(body: LabReportIn):
-    report_id = str(uuid.uuid4())
-    ts = body.ts or datetime.utcnow()
-    data = body.model_dump()
-    data["report_id"] = report_id
-    data["ts"] = ts.strftime("%Y-%m-%dT%H:%M:%S")
-    return _send("lab_reports", report_id, data)
-
-
-# ── Hospital Event ────────────────────────────────────────────────────────────
-
-VALID_EVENT_TYPES = {
-    "Admission", "Discharge", "Transfer",
-    "Emergency_Arrival", "Surgery_Start", "Surgery_End", "ICU_Transfer",
-}
-
-class HospitalEventIn(BaseModel):
-    patient_id: str
-    department_id: str
-    hospital: Optional[str] = None
-    ward: Optional[str] = None
-    event_type: str
-    amount: float = 0.0
-    ts: Optional[datetime] = None
-
-    @field_validator("patient_id", "department_id")
-    @classmethod
-    def non_empty(cls, v):
-        if not v.strip():
-            raise ValueError("cannot be empty")
-        return v.strip()
-
-    @field_validator("event_type")
-    @classmethod
-    def valid_event_type(cls, v):
-        if v not in VALID_EVENT_TYPES:
-            raise ValueError(f"must be one of {sorted(VALID_EVENT_TYPES)}")
-        return v
-
-    @field_validator("amount")
-    @classmethod
-    def valid_amount(cls, v):
-        if v < 0:
-            raise ValueError("must be non-negative")
-        return round(v, 2)
-
-
-@router.post("/hospital-event")
-def record_hospital_event(body: HospitalEventIn):
-    event_id = str(uuid.uuid4())
-    ts = body.ts or datetime.utcnow()
-    data = body.model_dump()
-    data["event_id"] = event_id
-    data["ts"] = ts.strftime("%Y-%m-%dT%H:%M:%S")
-    return _send("hospital_events", event_id, data)
-
-
-# ── ICU Code ──────────────────────────────────────────────────────────────────
-
-VALID_ICU_TYPES     = {"Code_Blue", "Rapid_Response", "STEMI_Alert", "Stroke_Alert", "Trauma_Activation"}
-VALID_ICU_SEVERITY  = {"CRITICAL", "HIGH"}
-VALID_ICU_STATUSES  = {"Activated", "Resolved", "False_Alarm"}
-
-class IcuCodeIn(BaseModel):
-    patient_id: str
-    department_id: str
-    hospital: Optional[str] = None
-    ward: Optional[str] = None
-    code_type: str
-    severity: str
-    amount: float = 0.0
-    status: str = "Activated"
-    ts: Optional[datetime] = None
-
-    @field_validator("patient_id", "department_id")
-    @classmethod
-    def non_empty(cls, v):
-        if not v.strip():
-            raise ValueError("cannot be empty")
-        return v.strip()
-
-    @field_validator("code_type")
-    @classmethod
-    def valid_code_type(cls, v):
-        if v not in VALID_ICU_TYPES:
-            raise ValueError(f"must be one of {sorted(VALID_ICU_TYPES)}")
-        return v
-
-    @field_validator("severity")
-    @classmethod
-    def valid_severity(cls, v):
-        if v not in VALID_ICU_SEVERITY:
-            raise ValueError(f"must be one of {sorted(VALID_ICU_SEVERITY)}")
-        return v
-
-    @field_validator("amount")
-    @classmethod
-    def valid_amount(cls, v):
-        if v < 0:
-            raise ValueError("must be non-negative")
-        return round(v, 2)
-
-    @field_validator("status")
-    @classmethod
-    def valid_status(cls, v):
-        if v not in VALID_ICU_STATUSES:
-            raise ValueError(f"must be one of {sorted(VALID_ICU_STATUSES)}")
-        return v
-
-
-@router.post("/icu-code")
-def record_icu_code(body: IcuCodeIn):
-    code_id = str(uuid.uuid4())
-    ts = body.ts or datetime.utcnow()
-    data = body.model_dump()
-    data["code_id"] = code_id
-    data["ts"] = ts.strftime("%Y-%m-%dT%H:%M:%S")
-    return _send("icu_codes", code_id, data)
+@router.post("/vitals")
+def record_vitals(body: VitalsIn):
+    from datetime import datetime
+    event_id = "V-" + uuid.uuid4().hex[:6].upper()
+    payload = {
+        "event_id": event_id,
+        "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S"),
+        **body.model_dump(),
+    }
+    return _send("patient_vitals", event_id, payload)

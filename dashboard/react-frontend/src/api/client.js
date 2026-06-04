@@ -48,24 +48,25 @@ export const chat = {
   insights: () => api.post('/chat/insights', {}),
 }
 
+export const monitoring = {
+  summary:      () => api.get('/monitoring/summary'),
+  alertsByType: () => api.get('/monitoring/alerts-by-type'),
+  recentAlerts: () => api.get('/monitoring/recent-alerts'),
+  vitalsSummary:() => api.get('/monitoring/vitals-summary'),
+  labSummary:   () => api.get('/monitoring/lab-summary'),
+  icuSummary:   () => api.get('/monitoring/icu-summary'),
+}
+
 export const dataEntry = {
   patient:       (d) => api.post('/data-entry/patient',        d),
   doctor:        (d) => api.post('/data-entry/doctor',         d),
   appointment:   (d) => api.post('/data-entry/appointment',    d),
   treatment:     (d) => api.post('/data-entry/treatment',      d),
   billing:       (d) => api.post('/data-entry/billing',        d),
-  department:    (d) => api.post('/data-entry/department',     d),
-  patientVitals: (d) => api.post('/data-entry/patient-vitals', d),
+  vitals:        (d) => api.post('/data-entry/vitals',         d),
+  alert:         (d) => api.post('/data-entry/alert',          d),
   labReport:     (d) => api.post('/data-entry/lab-report',     d),
   hospitalEvent: (d) => api.post('/data-entry/hospital-event', d),
   icuCode:       (d) => api.post('/data-entry/icu-code',       d),
-}
-
-export const monitoring = {
-  summary:            () => api.get('/monitoring/summary'),
-  vitalsSummary:      () => api.get('/monitoring/vitals-summary'),
-  labTests:           () => api.get('/monitoring/lab-tests'),
-  hospitalEvents:     () => api.get('/monitoring/hospital-events'),
-  departmentActivity: () => api.get('/monitoring/department-activity'),
-  icuCodes:           () => api.get('/monitoring/icu-codes'),
+  department:    (d) => api.post('/data-entry/department',     d),
 }

@@ -4,10 +4,10 @@ const NAV = [
   { to: '/financial',      icon: '📊', label: 'Financial'       },
   { to: '/operational',    icon: '⚙️',  label: 'Operational'     },
   { to: '/patients',       icon: '👥', label: 'Patients'        },
-  { to: '/monitoring',     icon: '🔴', label: 'Monitoring'      },
   { to: '/pipeline',       icon: '🔄', label: 'Pipeline'        },
   { to: '/data-entry',     icon: '📋', label: 'Data Entry'      },
   { to: '/infrastructure', icon: '🖥️', label: 'Infrastructure'  },
+  { to: '/monitoring',     icon: '🚨', label: 'Monitoring'      },
   { to: '/chat',           icon: '💬', label: 'Ask AI'          },
 ]
 

@@ -17,11 +17,11 @@ export default function App() {
         <Route path="/financial"     element={<Financial />} />
         <Route path="/operational"   element={<Operational />} />
         <Route path="/patients"      element={<Patients />} />
-        <Route path="/monitoring"    element={<Monitoring />} />
         <Route path="/pipeline"      element={<Pipeline />} />
         <Route path="/data-entry"    element={<DataEntry />} />
         <Route path="/infrastructure" element={<Infrastructure />} />
         <Route path="/chat"          element={<Chat />} />
+        <Route path="/monitoring"    element={<Monitoring />} />
       </Routes>
     </Layout>
   )

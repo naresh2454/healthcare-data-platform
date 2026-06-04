@@ -1,147 +1,275 @@
 import { useEffect, useState } from 'react'
-import {
-  BarChart, Bar, PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
-} from 'recharts'
 import { monitoring } from '../api/client'
-import StatCard from '../components/StatCard'
-import ChartCard from '../components/ChartCard'
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316']
-const FLAG_COLORS = { normal: '#10b981', low: '#f59e0b', high: '#f97316', critical: '#ef4444' }
-const fmt = (n) => n >= 1e6 ? `₹${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `₹${(n / 1e3).toFixed(0)}K` : `₹${n}`
+function StatBox({ label, value, sub, color = 'text-white' }) {
+  return (
+    <div className="bg-navy-800 border border-navy-700 rounded-xl p-4">
+      <p className="text-xs text-slate-400 mb-1">{label}</p>
+      <p className={`text-2xl font-bold ${color}`}>{value ?? '—'}</p>
+      {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
+    </div>
+  )
+}
+
+const SEVERITY_COLOR = {
+  CRITICAL: 'text-red-400 bg-red-400/10 border-red-500/30',
+  HIGH:     'text-orange-400 bg-orange-400/10 border-orange-500/30',
+  WARNING:  'text-yellow-400 bg-yellow-400/10 border-yellow-500/30',
+}
+const SEVERITY_DOT = {
+  CRITICAL: 'bg-red-500',
+  HIGH:     'bg-orange-400',
+  WARNING:  'bg-yellow-400',
+}
 
 export default function Monitoring() {
-  const [summary, setSummary]   = useState(null)
-  const [vitals, setVitals]     = useState([])
-  const [labs, setLabs]         = useState([])
-  const [events, setEvents]     = useState([])
-  const [depts, setDepts]       = useState([])
-  const [icu, setIcu]           = useState([])
+  const [summary, setSummary]     = useState(null)
+  const [byType, setByType]       = useState([])
+  const [recent, setRecent]       = useState([])
+  const [vitals, setVitals]       = useState([])
+  const [labs, setLabs]           = useState([])
+  const [icu, setIcu]             = useState([])
+  const [tab, setTab]             = useState('alerts')
+  const [loading, setLoading]     = useState(true)
 
   useEffect(() => {
-    monitoring.summary().then(r => setSummary(r.data))
-    monitoring.vitalsSummary().then(r => setVitals(r.data.slice(0, 10)))
-    monitoring.labTests().then(r => setLabs(r.data))
-    monitoring.hospitalEvents().then(r => setEvents(r.data))
-    monitoring.departmentActivity().then(r => setDepts(r.data))
-    monitoring.icuCodes().then(r => setIcu(r.data))
+    Promise.all([
+      monitoring.summary(),
+      monitoring.alertsByType(),
+      monitoring.recentAlerts(),
+      monitoring.vitalsSummary(),
+      monitoring.labSummary(),
+      monitoring.icuSummary(),
+    ]).then(([s, bt, ra, v, l, i]) => {
+      setSummary(s.data)
+      setByType(bt.data)
+      setRecent(ra.data)
+      setVitals(v.data)
+      setLabs(l.data)
+      setIcu(i.data)
+    }).finally(() => setLoading(false))
   }, [])
+
+  if (loading) return <p className="text-slate-400 text-sm">Loading monitoring data…</p>
+
+  const TABS = [
+    { id: 'alerts',  label: 'Recent Alerts' },
+    { id: 'vitals',  label: 'Vitals Anomalies' },
+    { id: 'labs',    label: 'Lab Results' },
+    { id: 'icu',     label: 'ICU Codes' },
+  ]
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-white">Monitoring Analytics</h1>
+      <h1 className="text-xl font-bold text-white">Flink Monitoring</h1>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-        <StatCard label="Total Anomalies"     value={summary ? summary.total_anomalies : '—'}           color="red"    />
-        <StatCard label="Avg Anomaly Rate"    value={summary ? `${summary.avg_anomaly_rate}%` : '—'}    color="orange" />
-        <StatCard label="Critical Lab Tests"  value={summary ? summary.critical_lab_tests : '—'}        color="purple" />
-        <StatCard label="ICU Activations"     value={summary ? summary.icu_activations : '—'}           color="blue"   />
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <StatBox label="Total Alerts" value={summary?.total_alerts?.toLocaleString()} />
+        <StatBox label="Critical" value={summary?.critical_count?.toLocaleString()} color="text-red-400" />
+        <StatBox label="Last 24h" value={summary?.last_24h?.toLocaleString()} color="text-orange-400" />
+        <StatBox label="Emails Sent" value={summary?.emails_sent?.toLocaleString()} color="text-green-400" sub="to doctors" />
+        <StatBox label="ICU Activations" value={summary?.icu_activations?.toLocaleString()} color="text-purple-400" sub="Spark aggregated" />
       </div>
 
-      {/* Row 1 — Vitals anomaly + ICU pie */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <ChartCard title="Patient Anomaly Rate (Top 10)">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={vitals} layout="vertical" margin={{ left: 10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis type="number" unit="%" tick={{ fill: '#94a3b8', fontSize: 11 }} domain={[0, 100]} />
-              <YAxis type="category" dataKey="patient_id" width={50} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-              <Tooltip
-                formatter={(v) => [`${v}%`, 'Anomaly Rate']}
-                contentStyle={{ background: '#1e293b', border: '1px solid #334155' }}
-              />
-              <Bar dataKey="anomaly_rate_pct" name="Anomaly Rate %" fill="#ef4444" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="ICU Code Distribution">
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie
-                data={icu} dataKey="code_count" nameKey="code_type"
-                cx="50%" cy="50%" outerRadius={80}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                labelLine={false}
-              >
-                {icu.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-              </Pie>
-              <Tooltip
-                formatter={(v, n, p) => [v, p.payload.code_type]}
-                contentStyle={{ background: '#1e293b', border: '1px solid #334155' }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </ChartCard>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatBox label="Vitals Anomalies" value={summary?.vitals_anomalies?.toLocaleString()} color="text-yellow-400" sub="Spark aggregated" />
+        <StatBox label="Critical Lab Tests" value={summary?.critical_labs?.toLocaleString()} color="text-red-400" sub="Spark aggregated" />
+        <StatBox label="Last Hour Alerts" value={summary?.last_1h?.toLocaleString()} color="text-brand-400" sub="live from Flink" />
       </div>
 
-      {/* Row 2 — Lab flags + Hospital events */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <ChartCard title="Lab Test Flag Distribution">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={labs}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="test_name" tick={{ fill: '#94a3b8', fontSize: 10 }} />
-              <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155' }} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="normal_count"   name="Normal"   fill={FLAG_COLORS.normal}   stackId="a" />
-              <Bar dataKey="low_count"      name="Low"      fill={FLAG_COLORS.low}      stackId="a" />
-              <Bar dataKey="high_count"     name="High"     fill={FLAG_COLORS.high}     stackId="a" />
-              <Bar dataKey="critical_count" name="Critical" fill={FLAG_COLORS.critical} stackId="a" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="Hospital Events by Type">
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={events} layout="vertical" margin={{ left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis type="number" tickFormatter={fmt} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-              <YAxis type="category" dataKey="event_type" width={110} tick={{ fill: '#94a3b8', fontSize: 10 }} />
-              <Tooltip
-                formatter={(v, n) => [n === 'total_amount' ? fmt(v) : v, n === 'total_amount' ? 'Revenue' : 'Count']}
-                contentStyle={{ background: '#1e293b', border: '1px solid #334155' }}
-              />
-              <Bar dataKey="total_amount" name="total_amount" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
-
-      {/* Department Activity Table */}
-      <ChartCard title="Department Activity">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-slate-400 border-b border-navy-700">
-                <th className="pb-2 pr-4">Department</th>
-                <th className="pb-2 pr-4">Branch</th>
-                <th className="pb-2 pr-4 text-right">Events</th>
-                <th className="pb-2 pr-4 text-right">ICU Codes</th>
-                <th className="pb-2 pr-4 text-right">Critical ICU</th>
-                <th className="pb-2 pr-4 text-right">Event Rev</th>
-                <th className="pb-2 text-right">Total Rev</th>
-              </tr>
-            </thead>
-            <tbody>
-              {depts.map((d, i) => (
-                <tr key={i} className="border-b border-navy-700/50 hover:bg-navy-700/30 transition-colors">
-                  <td className="py-2 pr-4 font-medium text-white">{d.department_name}</td>
-                  <td className="py-2 pr-4 text-slate-400">{d.hospital_branch}</td>
-                  <td className="py-2 pr-4 text-right">{d.total_events}</td>
-                  <td className="py-2 pr-4 text-right">{d.total_icu_codes}</td>
-                  <td className="py-2 pr-4 text-right text-red-400 font-medium">{d.critical_icu_count}</td>
-                  <td className="py-2 pr-4 text-right text-slate-300">{fmt(d.total_event_amount)}</td>
-                  <td className="py-2 text-right text-emerald-400 font-medium">{fmt(d.total_amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Alert type breakdown */}
+      <div className="bg-navy-800 border border-navy-700 rounded-xl p-5">
+        <h2 className="text-sm font-semibold text-white mb-4">Alerts by Type (Flink detected)</h2>
+        <div className="flex flex-wrap gap-2">
+          {byType.map((r, i) => (
+            <span key={i} className={`px-3 py-1.5 rounded-lg border text-xs font-medium ${SEVERITY_COLOR[r.severity] || 'text-slate-400 bg-navy-700 border-navy-600'}`}>
+              {r.alert_type} / {r.severity} — {r.count.toLocaleString()}
+            </span>
+          ))}
         </div>
-      </ChartCard>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-navy-800 p-1 rounded-xl w-fit flex-wrap">
+        {TABS.map(({ id, label }) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${tab === id ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white hover:bg-navy-700'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Recent Alerts */}
+      {tab === 'alerts' && (
+        <div className="bg-navy-800 border border-navy-700 rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-navy-700">
+            <h2 className="text-sm font-semibold text-white">Last 50 Flink-Generated Alerts</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-navy-700 text-slate-400">
+                  <th className="px-4 py-2 text-left">Time</th>
+                  <th className="px-4 py-2 text-left">Severity</th>
+                  <th className="px-4 py-2 text-left">Type</th>
+                  <th className="px-4 py-2 text-left">Patient</th>
+                  <th className="px-4 py-2 text-left">Doctor</th>
+                  <th className="px-4 py-2 text-left">Message</th>
+                  <th className="px-4 py-2 text-left">Emailed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((r) => (
+                  <tr key={r.alert_id} className="border-b border-navy-700/50 hover:bg-navy-700/30">
+                    <td className="px-4 py-2 text-slate-400 whitespace-nowrap">{r.ts?.slice(0, 16).replace('T', ' ')}</td>
+                    <td className="px-4 py-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold flex items-center gap-1 w-fit ${SEVERITY_COLOR[r.severity] || ''}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${SEVERITY_DOT[r.severity] || 'bg-slate-400'}`} />
+                        {r.severity}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-slate-300">{r.alert_type}</td>
+                    <td className="px-4 py-2 text-white font-mono">{r.patient_id}</td>
+                    <td className="px-4 py-2 text-slate-300 font-mono">{r.doctor_id || '—'}</td>
+                    <td className="px-4 py-2 text-slate-400 max-w-xs truncate">{r.alert_message}</td>
+                    <td className="px-4 py-2">
+                      <span className={r.is_email_sent ? 'text-green-400' : 'text-slate-600'}>
+                        {r.is_email_sent ? 'Yes' : 'No'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Vitals Anomalies */}
+      {tab === 'vitals' && (
+        <div className="bg-navy-800 border border-navy-700 rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-navy-700">
+            <h2 className="text-sm font-semibold text-white">Vitals Anomaly Summary per Patient (Spark aggregated)</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-navy-700 text-slate-400">
+                  <th className="px-4 py-2 text-left">Patient</th>
+                  <th className="px-4 py-2 text-right">Readings</th>
+                  <th className="px-4 py-2 text-right">Anomalies</th>
+                  <th className="px-4 py-2 text-right">Anomaly %</th>
+                  <th className="px-4 py-2 text-right">Avg HR</th>
+                  <th className="px-4 py-2 text-right">Avg SpO₂</th>
+                  <th className="px-4 py-2 text-right">Avg Sys/Dia</th>
+                  <th className="px-4 py-2 text-right">Avg Temp °C</th>
+                  <th className="px-4 py-2 text-right">Avg RR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vitals.map((r) => (
+                  <tr key={r.patient_id} className="border-b border-navy-700/50 hover:bg-navy-700/30">
+                    <td className="px-4 py-2 text-white font-mono">{r.patient_id}</td>
+                    <td className="px-4 py-2 text-right text-slate-300">{r.total_readings}</td>
+                    <td className="px-4 py-2 text-right text-orange-400">{r.anomaly_count}</td>
+                    <td className="px-4 py-2 text-right">
+                      <span className={r.anomaly_rate_pct > 20 ? 'text-red-400' : r.anomaly_rate_pct > 10 ? 'text-yellow-400' : 'text-green-400'}>
+                        {r.anomaly_rate_pct}%
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right text-slate-300">{r.avg_heart_rate}</td>
+                    <td className="px-4 py-2 text-right text-slate-300">{r.avg_spo2}%</td>
+                    <td className="px-4 py-2 text-right text-slate-300">{r.avg_systolic}/{r.avg_diastolic}</td>
+                    <td className="px-4 py-2 text-right text-slate-300">{r.avg_temperature}</td>
+                    <td className="px-4 py-2 text-right text-slate-300">{r.avg_respiratory_rate}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Lab Results */}
+      {tab === 'labs' && (
+        <div className="bg-navy-800 border border-navy-700 rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-navy-700">
+            <h2 className="text-sm font-semibold text-white">Lab Test Summary (Spark aggregated from Flink data)</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-navy-700 text-slate-400">
+                  <th className="px-4 py-2 text-left">Test</th>
+                  <th className="px-4 py-2 text-right">Total</th>
+                  <th className="px-4 py-2 text-right">Normal</th>
+                  <th className="px-4 py-2 text-right">Low</th>
+                  <th className="px-4 py-2 text-right">High</th>
+                  <th className="px-4 py-2 text-right">Critical</th>
+                  <th className="px-4 py-2 text-right">Critical %</th>
+                  <th className="px-4 py-2 text-right">Revenue ₹</th>
+                </tr>
+              </thead>
+              <tbody>
+                {labs.map((r) => (
+                  <tr key={r.test_name} className="border-b border-navy-700/50 hover:bg-navy-700/30">
+                    <td className="px-4 py-2 text-white">{r.test_name}</td>
+                    <td className="px-4 py-2 text-right text-slate-300">{r.total_tests}</td>
+                    <td className="px-4 py-2 text-right text-green-400">{r.normal_count}</td>
+                    <td className="px-4 py-2 text-right text-yellow-400">{r.low_count}</td>
+                    <td className="px-4 py-2 text-right text-orange-400">{r.high_count}</td>
+                    <td className="px-4 py-2 text-right text-red-400">{r.critical_count}</td>
+                    <td className="px-4 py-2 text-right">
+                      <span className={r.critical_rate_pct > 15 ? 'text-red-400' : 'text-slate-300'}>
+                        {r.critical_rate_pct}%
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right text-slate-300">₹{Number(r.total_revenue).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ICU Codes */}
+      {tab === 'icu' && (
+        <div className="bg-navy-800 border border-navy-700 rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-navy-700">
+            <h2 className="text-sm font-semibold text-white">ICU Code Activations (Flink → Spark)</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-navy-700 text-slate-400">
+                  <th className="px-4 py-2 text-left">Code Type</th>
+                  <th className="px-4 py-2 text-left">Severity</th>
+                  <th className="px-4 py-2 text-right">Activations</th>
+                  <th className="px-4 py-2 text-right">Total Cost ₹</th>
+                  <th className="px-4 py-2 text-right">Avg Cost ₹</th>
+                </tr>
+              </thead>
+              <tbody>
+                {icu.map((r, i) => (
+                  <tr key={i} className="border-b border-navy-700/50 hover:bg-navy-700/30">
+                    <td className="px-4 py-2 text-white">{r.code_type}</td>
+                    <td className="px-4 py-2">
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${SEVERITY_COLOR[r.severity] || 'text-slate-400'}`}>
+                        {r.severity}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right text-orange-400 font-semibold">{r.code_count.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-slate-300">₹{Number(r.total_amount).toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-slate-300">₹{Number(r.avg_amount).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
