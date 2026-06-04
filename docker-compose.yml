@@ -72,6 +72,7 @@ services:
     command:
       - -c
       - |
+        chmod 777 /opt/spark/event-logs
         airflow db migrate
         airflow users create \
           --username ${_AIRFLOW_WWW_USER_USERNAME} \
