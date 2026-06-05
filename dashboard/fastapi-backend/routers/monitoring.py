@@ -49,10 +49,21 @@ def recent_alerts():
 def vitals_summary():
     return db.query("""
         SELECT patient_id, total_readings, anomaly_count, anomaly_rate_pct,
+               hr_anomaly_count, spo2_anomaly_count, temp_anomaly_count,
                avg_heart_rate, avg_spo2, avg_systolic, avg_diastolic,
                avg_temperature, avg_respiratory_rate
         FROM analytics_vitals_patient_summary
         ORDER BY anomaly_rate_pct DESC
+    """)
+
+
+@router.get("/patient-alert-summary")
+def patient_alert_summary():
+    return db.query("""
+        SELECT patient_id, total_alerts, critical_count, high_count,
+               warning_count, emails_sent, distinct_alert_types, latest_alert_ts
+        FROM analytics_patient_alert_summary
+        ORDER BY total_alerts DESC
     """)
 
 

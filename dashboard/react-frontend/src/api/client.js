@@ -49,12 +49,13 @@ export const chat = {
 }
 
 export const monitoring = {
-  summary:      () => api.get('/monitoring/summary'),
-  alertsByType: () => api.get('/monitoring/alerts-by-type'),
-  recentAlerts: () => api.get('/monitoring/recent-alerts'),
-  vitalsSummary:() => api.get('/monitoring/vitals-summary'),
-  labSummary:   () => api.get('/monitoring/lab-summary'),
-  icuSummary:   () => api.get('/monitoring/icu-summary'),
+  summary:            () => api.get('/monitoring/summary'),
+  alertsByType:       () => api.get('/monitoring/alerts-by-type'),
+  recentAlerts:       () => api.get('/monitoring/recent-alerts'),
+  vitalsSummary:      () => api.get('/monitoring/vitals-summary'),
+  labSummary:         () => api.get('/monitoring/lab-summary'),
+  icuSummary:         () => api.get('/monitoring/icu-summary'),
+  patientAlertSummary:() => api.get('/monitoring/patient-alert-summary'),
 }
 
 export const dataEntry = {

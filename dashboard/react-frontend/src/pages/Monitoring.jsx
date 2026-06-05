@@ -23,14 +23,15 @@ const SEVERITY_DOT = {
 }
 
 export default function Monitoring() {
-  const [summary, setSummary]     = useState(null)
-  const [byType, setByType]       = useState([])
-  const [recent, setRecent]       = useState([])
-  const [vitals, setVitals]       = useState([])
-  const [labs, setLabs]           = useState([])
-  const [icu, setIcu]             = useState([])
-  const [tab, setTab]             = useState('alerts')
-  const [loading, setLoading]     = useState(true)
+  const [summary, setSummary]         = useState(null)
+  const [byType, setByType]           = useState([])
+  const [recent, setRecent]           = useState([])
+  const [vitals, setVitals]           = useState([])
+  const [labs, setLabs]               = useState([])
+  const [icu, setIcu]                 = useState([])
+  const [alertPx, setAlertPx]         = useState([])
+  const [tab, setTab]                 = useState('alerts')
+  const [loading, setLoading]         = useState(true)
 
   useEffect(() => {
     Promise.all([
@@ -40,23 +41,26 @@ export default function Monitoring() {
       monitoring.vitalsSummary(),
       monitoring.labSummary(),
       monitoring.icuSummary(),
-    ]).then(([s, bt, ra, v, l, i]) => {
+      monitoring.patientAlertSummary(),
+    ]).then(([s, bt, ra, v, l, i, pa]) => {
       setSummary(s.data)
       setByType(bt.data)
       setRecent(ra.data)
       setVitals(v.data)
       setLabs(l.data)
       setIcu(i.data)
+      setAlertPx(pa.data)
     }).finally(() => setLoading(false))
   }, [])
 
   if (loading) return <p className="text-slate-400 text-sm">Loading monitoring data…</p>
 
   const TABS = [
-    { id: 'alerts',  label: 'Recent Alerts' },
-    { id: 'vitals',  label: 'Vitals Anomalies' },
-    { id: 'labs',    label: 'Lab Results' },
-    { id: 'icu',     label: 'ICU Codes' },
+    { id: 'alerts',   label: 'Recent Alerts' },
+    { id: 'patientalerts', label: 'Per-Patient Alerts' },
+    { id: 'vitals',   label: 'Vitals Anomalies' },
+    { id: 'labs',     label: 'Lab Results' },
+    { id: 'icu',      label: 'ICU Codes' },
   ]
 
   return (
@@ -146,11 +150,50 @@ export default function Monitoring() {
         </div>
       )}
 
+      {/* Per-Patient Alert Summary */}
+      {tab === 'patientalerts' && (
+        <div className="bg-navy-800 border border-navy-700 rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-navy-700">
+            <h2 className="text-sm font-semibold text-white">Per-Patient Alert Summary (Flink → Spark aggregated)</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-navy-700 text-slate-400">
+                  <th className="px-4 py-2 text-left">Patient</th>
+                  <th className="px-4 py-2 text-right">Total Alerts</th>
+                  <th className="px-4 py-2 text-right">Critical</th>
+                  <th className="px-4 py-2 text-right">High</th>
+                  <th className="px-4 py-2 text-right">Warning</th>
+                  <th className="px-4 py-2 text-right">Emails Sent</th>
+                  <th className="px-4 py-2 text-right">Alert Types</th>
+                  <th className="px-4 py-2 text-left">Latest Alert</th>
+                </tr>
+              </thead>
+              <tbody>
+                {alertPx.map((r) => (
+                  <tr key={r.patient_id} className="border-b border-navy-700/50 hover:bg-navy-700/30">
+                    <td className="px-4 py-2 text-white font-mono">{r.patient_id}</td>
+                    <td className="px-4 py-2 text-right text-white font-semibold">{r.total_alerts?.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-red-400">{r.critical_count?.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-orange-400">{r.high_count?.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-yellow-400">{r.warning_count?.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-green-400">{r.emails_sent?.toLocaleString()}</td>
+                    <td className="px-4 py-2 text-right text-slate-300">{r.distinct_alert_types}</td>
+                    <td className="px-4 py-2 text-slate-400">{r.latest_alert_ts?.slice(0,16).replace('T',' ')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Vitals Anomalies */}
       {tab === 'vitals' && (
         <div className="bg-navy-800 border border-navy-700 rounded-xl overflow-hidden">
           <div className="px-5 py-3 border-b border-navy-700">
-            <h2 className="text-sm font-semibold text-white">Vitals Anomaly Summary per Patient (Spark aggregated)</h2>
+            <h2 className="text-sm font-semibold text-white">Vitals Anomaly Summary — Flink threshold detection (HR &gt;150/&lt;40 · SpO₂&lt;90 · Temp&gt;39/&lt;35)</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -160,11 +203,13 @@ export default function Monitoring() {
                   <th className="px-4 py-2 text-right">Readings</th>
                   <th className="px-4 py-2 text-right">Anomalies</th>
                   <th className="px-4 py-2 text-right">Anomaly %</th>
+                  <th className="px-4 py-2 text-right">HR Anom.</th>
+                  <th className="px-4 py-2 text-right">SpO₂ Anom.</th>
+                  <th className="px-4 py-2 text-right">Temp Anom.</th>
                   <th className="px-4 py-2 text-right">Avg HR</th>
                   <th className="px-4 py-2 text-right">Avg SpO₂</th>
                   <th className="px-4 py-2 text-right">Avg Sys/Dia</th>
                   <th className="px-4 py-2 text-right">Avg Temp °C</th>
-                  <th className="px-4 py-2 text-right">Avg RR</th>
                 </tr>
               </thead>
               <tbody>
@@ -178,11 +223,13 @@ export default function Monitoring() {
                         {r.anomaly_rate_pct}%
                       </span>
                     </td>
+                    <td className="px-4 py-2 text-right text-red-400">{r.hr_anomaly_count ?? '—'}</td>
+                    <td className="px-4 py-2 text-right text-purple-400">{r.spo2_anomaly_count ?? '—'}</td>
+                    <td className="px-4 py-2 text-right text-yellow-400">{r.temp_anomaly_count ?? '—'}</td>
                     <td className="px-4 py-2 text-right text-slate-300">{r.avg_heart_rate}</td>
                     <td className="px-4 py-2 text-right text-slate-300">{r.avg_spo2}%</td>
                     <td className="px-4 py-2 text-right text-slate-300">{r.avg_systolic}/{r.avg_diastolic}</td>
                     <td className="px-4 py-2 text-right text-slate-300">{r.avg_temperature}</td>
-                    <td className="px-4 py-2 text-right text-slate-300">{r.avg_respiratory_rate}</td>
                   </tr>
                 ))}
               </tbody>
